@@ -22,66 +22,47 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 '''
 
 import inkex
-import simplestyle, sys
-from simplepath import formatPath
+import sys
+from lxml import etree
+from inkex.paths import Path
+from inkex.styles import Style
 
+def dirtyFormat(path):
+    return str(path).replace('[','').replace(']','').replace(',','').replace('\'','')
+		
 class RobotBox(inkex.Effect):
+
+
     def __init__(self):
         inkex.Effect.__init__(self)
-        self.OptionParser.add_option("-x", "--width",
-                        action="store", type="float",
-                        dest="width", default=62.0,
-                        help="The Box Width - in the X dimension")
-        self.OptionParser.add_option("-y", "--height",
-                        action="store", type="float",
-                        dest="height", default=38.0,
-                        help="The Box Height - in the Y dimension")
-        self.OptionParser.add_option("-z", "--depth",
-                        action="store", type="float",
-                        dest="depth", default=23.0,
-                        help="The Box Depth - in the Z dimension")
-        self.OptionParser.add_option("-p", "--paper-thickness",
-                        action="store", type="float",
-                        dest="thickness", default=1.0,
-                        help="Paper thickness - important for thick carton")
-        self.OptionParser.add_option("-c", "--cramp-height",
-                        action="store", type="float",
-                        dest="cramp_height", default=1.0,
-                        help="Cramp ear height - render cramping ears and slots on the left and right walls (0 for no cramp)")
-        self.OptionParser.add_option("-d", "--dash-width",
-                        action="store", type="float",
-                        dest="dash_width", default=5.0,
-                        help="Bend line dash width")
-        self.OptionParser.add_option("-s", "--dash-step",
-                        action="store", type="float",
-                        dest="dash_step", default=5.0,
-                        help="Bend line dash step")
-        self.OptionParser.add_option("-b", "--bendline-surface",
-                        action="store", type="string",
-                        dest="bend_surface", default="inner",
+        self.arg_parser.add_argument("-x", "--width", type=float, default=62.0, help="The Box Width - in the X dimension")
+        self.arg_parser.add_argument("-y", "--height", type=float, default=38.0, help="The Box Height - in the Y dimension")
+        self.arg_parser.add_argument("-z", "--depth", type=float, default=23.0,  help="The Box Depth - in the Z dimension")
+        self.arg_parser.add_argument("-p", "--thickness", type=float, default=1.0, help="Paper thickness - important for thick carton")
+        self.arg_parser.add_argument("-c", "--crampheight", type=float, default=1.0, help="Cramp ear height - render cramping ears and slots on the left and right walls (0 for no cramp)")
+        self.arg_parser.add_argument("-d", "--dashwidth", type=float, default=5.0, help="Bend line dash width")
+        self.arg_parser.add_argument("-s", "--dashstep", type=float, default=5.0, help="Bend line dash step")
+        self.arg_parser.add_argument("-b", "--bendsurface", default="inner",
                         help="Bend line surface (innder or outer) - depends on the way you will make actual bends")
-        self.OptionParser.add_option("-u", "--unit",
-                        action="store", type="string",
-                        dest="unit", default="mm",
-                        help="The unit of dimensions")
+        self.arg_parser.add_argument("-u", "--unit", default="mm", help="The unit of dimensions")
                         
     def effect(self):
 
-        width  = self.unittouu( str(self.options.width) + self.options.unit )
-        height = self.unittouu( str(self.options.height) + self.options.unit )
-        depth  = self.unittouu( str(self.options.depth) + self.options.unit )
-        thickness  = self.unittouu( str(self.options.thickness) + self.options.unit )
-        cramp_height  = self.unittouu( str(self.options.cramp_height) + self.options.unit )
-        dash_width  = self.unittouu( str(self.options.dash_width) + self.options.unit )
-        dash_step  = self.unittouu( str(self.options.dash_step) + self.options.unit )
-        bend_surface  = self.options.bend_surface
+        width  = self.svg.unittouu( str(self.options.width) + self.options.unit )
+        height = self.svg.unittouu( str(self.options.height) + self.options.unit )
+        depth  = self.svg.unittouu( str(self.options.depth) + self.options.unit )
+        thickness  = self.svg.unittouu( str(self.options.thickness) + self.options.unit )
+        crampheight  = self.svg.unittouu( str(self.options.crampheight) + self.options.unit )
+        dashwidth  = self.svg.unittouu( str(self.options.dashwidth) + self.options.unit )
+        dashstep  = self.svg.unittouu( str(self.options.dashstep) + self.options.unit )
+        bendsurface  = self.options.bendsurface
 
         # bend correction: it makes sense when compose the box whether the bend line would
         # lay on the inner or outer surface of the thick carton
         bcorr = 0
-        if bend_surface == "inner":
+        if bendsurface == "inner":
             bcorr = 0
-        elif bend_surface == "outer":
+        elif bendsurface == "outer":
             bcorr = thickness
         else :# "middle"
             bcorr = thickness/2
@@ -118,17 +99,17 @@ class RobotBox(inkex.Effect):
         ]
 
         # render cramping ears if set
-        if cramp_height > 0:
+        if crampheight > 0:
             left_cramp_x = -((thickness-bcorr)+slot_width+bcorr)-(depth+bcorr*2)-(bcorr+slot_width+thickness+bcorr)-(bcorr+depth)
         
             left_points += [
                 # left cramp ear1
-                left_cramp_x,(depth+bcorr*2)+cramp_width,    left_cramp_x-cramp_height,(depth+bcorr*2)+cramp_width+thickness,
-                left_cramp_x-cramp_height,(depth+bcorr*2)+cramp_width*2-thickness,    left_cramp_x,(depth+bcorr*2)+cramp_width*2,
+                left_cramp_x,(depth+bcorr*2)+cramp_width,    left_cramp_x-crampheight,(depth+bcorr*2)+cramp_width+thickness,
+                left_cramp_x-crampheight,(depth+bcorr*2)+cramp_width*2-thickness,    left_cramp_x,(depth+bcorr*2)+cramp_width*2,
                 
                 # left cramp ear2
-                left_cramp_x,(depth+bcorr*2)+cramp_width*3,    left_cramp_x-cramp_height,(depth+bcorr*2)+cramp_width*3+thickness,
-                left_cramp_x-cramp_height,(depth+bcorr*2)+cramp_width*4-thickness,    left_cramp_x,(depth+bcorr*2)+cramp_width*4
+                left_cramp_x,(depth+bcorr*2)+cramp_width*3,    left_cramp_x-crampheight,(depth+bcorr*2)+cramp_width*3+thickness,
+                left_cramp_x-crampheight,(depth+bcorr*2)+cramp_width*4-thickness,    left_cramp_x,(depth+bcorr*2)+cramp_width*4
             ]
                 
                 
@@ -164,16 +145,16 @@ class RobotBox(inkex.Effect):
         ]
 
         # render cramping ears if set
-        if cramp_height > 0:
+        if crampheight > 0:
             right_cramp_x = right_base_x+((thickness-bcorr)+slot_width+bcorr)+(depth+bcorr*2)+(bcorr+slot_width+thickness+bcorr)+(bcorr+depth)
             right_points += [
                 # right cramp ear1
-                right_cramp_x,(depth+bcorr*2)+height-cramp_width,    right_cramp_x+cramp_height,(depth+bcorr*2)+height-cramp_width-thickness,
-                right_cramp_x+cramp_height,(depth+bcorr*2)+height-cramp_width*2+thickness,    right_cramp_x,(depth+bcorr*2)+height-cramp_width*2,    
+                right_cramp_x,(depth+bcorr*2)+height-cramp_width,    right_cramp_x+crampheight,(depth+bcorr*2)+height-cramp_width-thickness,
+                right_cramp_x+crampheight,(depth+bcorr*2)+height-cramp_width*2+thickness,    right_cramp_x,(depth+bcorr*2)+height-cramp_width*2,    
                 
                 # right cramp ear2
-                right_cramp_x,(depth+bcorr*2)+height-cramp_width*3,    right_cramp_x+cramp_height,(depth+bcorr*2)+height-cramp_width*3-thickness,
-                right_cramp_x+cramp_height,(depth+bcorr*2)+height-cramp_width*4+thickness,    right_cramp_x,(depth+bcorr*2)+height-cramp_width*4
+                right_cramp_x,(depth+bcorr*2)+height-cramp_width*3,    right_cramp_x+crampheight,(depth+bcorr*2)+height-cramp_width*3-thickness,
+                right_cramp_x+crampheight,(depth+bcorr*2)+height-cramp_width*4+thickness,    right_cramp_x,(depth+bcorr*2)+height-cramp_width*4
             ]
 
         right_points += [
@@ -266,8 +247,8 @@ class RobotBox(inkex.Effect):
 
         # vertical bends
         # left
-        bend_line_vl1 = [ [ 'M', [ 0, 0, 
-            0, depth ] ] ]
+        # isinstance(item[1], (list, tuple)):     self.append(PathCommand.letter_to_class(item[0])(*item[1]))
+        bend_line_vl1 = [ [ 'M', [ 0, 0, 0, depth ] ] ]
         bend_line_vl2 = [ [ 'M', [ 
             -((thickness-bcorr)+slot_width+bcorr),(depth+bcorr*2), 
             -((thickness-bcorr)+slot_width+bcorr),(depth+bcorr*2)+height ] ] ]
@@ -329,97 +310,53 @@ class RobotBox(inkex.Effect):
 
         # Embed drawing in group to make animation easier:
         # Translate group
-        t = 'translate(' + str( self.view_center[0] ) + ',' + str( self.view_center[1] ) + ')'
+        t = 'translate(' + str( self.svg.namedview.center[0] ) + ',' + str( self.svg.namedview.center[1] ) + ')'
         g_attribs = {inkex.addNS('label','inkscape'):'RobotBox', 'transform':t }
-        g = inkex.etree.SubElement(self.current_layer, 'g', g_attribs)
+        g = etree.SubElement(self.svg.get_current_layer(), 'g', g_attribs)
 
         # Create SVG Path for box bounds
-        style = { 'stroke': '#000000', 'fill': 'none' }
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bound_points )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
+        style = { 'stroke': '#000000', 'fill': 'none', 'stroke-width':'1' }
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bound_points)} )
 
         # Create SVG paths for crmap slots if set
         # render slots for cramp ears
-        if cramp_height > 0:
-            path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( slot_l1 )}
-            inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-            
-            path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( slot_l2 )}
-            inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-            
-            path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( slot_r1 )}
-            inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-            
-            path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( slot_r2 )}
-            inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
+        if crampheight > 0:
+            etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(slot_l1)} )
+            etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(slot_l2)} )
+            etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(slot_r1)} )
+            etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(slot_r2)} )
 
         # Create SVG Paths for bend lines
         # draw bend lines with blue
-        style = { 'stroke': '#44aaff', 'fill': 'none', 
-            'stroke-dasharray': str(dash_width) + ',' + str(dash_step),
+        style = { 'stroke': '#44aaff', 'fill': 'none', 'stroke-width':'1', 
+            'stroke-dasharray': str(dashwidth) + ',' + str(dashstep),
             # positive dash offset moves dash backward
-            'stroke-dashoffset': str(dash_width) }
+            'stroke-dashoffset': str(dashwidth) }
 
         # left
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vl1 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vl1)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vl2)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vl3)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vl4)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vl5)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vl6)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vl7)} )
 
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vl2 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vl3 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vl4 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vl5 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-        
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vl6 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vl7 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        # right
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vr1 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vr2 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vr3 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vr4 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vr5 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vr6 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_vr7 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
+        # right 
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vr1)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vr2)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vr3)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vr4)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vr5)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vr6)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_vr7)} )
 
         # horizontal
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_h1 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_h2 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_h3 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
-
-        path_attribs = {'style':simplestyle.formatStyle(style), 'd':formatPath( bend_line_h4 )}
-        inkex.etree.SubElement(g, inkex.addNS('path','svg'), path_attribs )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_h1)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_h2)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_h3)} )
+        etree.SubElement(g, inkex.addNS('path','svg'), {'style':str(inkex.Style(style)), 'd':dirtyFormat(bend_line_h4)} )
 
 if __name__ == '__main__':
     e = RobotBox()
-    e.affect()
-
-
-# vim: expandtab shiftwidth=4 tabstop=8 softtabstop=4 encoding=utf-8 textwidth=99
+    e.run()
